@@ -6,31 +6,27 @@
 ##### Bo Zhou, Kumail Raza
 
 ## Installation
-<code>
-1. Clone the Repository<br>
-2. cd smartmatvisualizer<br>
-3. pip install -r requirements.txt<br>
-4. put all the session files in PY/ folder<br>
-</code>
-<br>
+
+1. Clone the Repository
+2. <code>cd smartmatvisualizer</code>
+3. <code>pip install -r requirements.txt</code>
+4. put all the session files in <code>PY/</code> folder
+
+
 
 ## Running the tool
-Run <code>python viewer.py --help </code> to get information all the supported arguments.
-Required arguments are as follows:
-<code>
->--session - session between 1 to 3<br>
->--bin - bin between 1 and 4<br>
->--uid - unique userID (any integer)
-</code>
+Run <code>python viewer.py --help</code> to get information all the supported arguments. Required arguments are as follows:<br>
+><code>--session - session between 1 to 3</code><br>
+><code>--bin - bin between 1 and 4</code><br>
+><code>--uid - unique userID (any integer)</code><br>
 
 Optional Arguments:
-<code>
->--load - (1 or 0) to load a previous session, use with UID<br>
->--sample - to start with a specific sample using sampleID in a session file<br>
->--debug - (0 or 1) to run in debug mode to display additional information on the UI as well as the terminal
-</code>
+><code>--load - (1 or 0) to load a previous session, use with UID</code><br>
+><code>--sample - to start with a specific sample using sampleID in a session file</code><br>
+><code>--debug - (0 or 1) to run in debug mode to display additional information on the UI as well as the terminal</code><br>
+
 
 Saved session json files for a user are saved in the <code>saved/</code> folder and have the following name format:
-<code>
->\<uid\>\_Sess\_\<sessionID>\_Bin\_\<binID>.json<br>
->for example:    41_Sess_2_Bin_1.json </code>
+
+><code>\<uid\>\_Sess\_\<sessionID>\_Bin\_\<binID>.json</code><br>
+><code>for example:    41_Sess_2_Bin_1.json </code>
