@@ -13,23 +13,42 @@ import matplotlib.pyplot as plt
 import json
 import random
 import cmapy
+from myclasses import DataGenerator
 
     
 '''Macros'''
 matplotlib.use("TkAgg")
-leaveoutsession = 1
-label_count = defaultdict(int)
+
 
 '''Argument Parser'''
 parser = argparse.ArgumentParser(description='SMARTMAT Data Visualizer')
-parser.add_argument('--bin', type=int, required=True, help="bin to load (1 to 4)")
-parser.add_argument('--session', type=int, required=True, help="session to load (1 to 3)")
+parser.add_argument('--data_path', type=str, default='./PY/datagen_3d/all/' ,required=False, help="data_path")
 parser.add_argument('--sample', type=int, required=False, default=0, help="Specific Sample to Load")
 parser.add_argument('--uid', type=int, required=True, help="Specific UID to load state")
 parser.add_argument('--load', type=int, required=False, default=0, help="Set to 1 to load state for given UID. Use with UID")
 parser.add_argument('--debug', type=int, required=False, default=0, help="Set 1 to display GT labels")
+parser.add_argument('--train', type=int, required=False, default=0, help="Set 1 to change UI as training session")
 
 
+def load_data(data_path, train_flag):
+    if train_flag == 1:
+        shuffle = False
+    else:
+        shuffle = True
+    params = {'dim':  (128,64,50) ,  #time window size 50
+            'batch_size': 1,
+            'n_channels': 1,
+            'shuffle': shuffle,
+            'file_path': data_path}
+    # leave session out mode
+    labels0 = np.load(data_path + 'm_labels0.npy') -1
+    labels1 = np.load(data_path + 'm_labels1.npy') -1
+
+    #train_list = np.arange(10152,29234).tolist()
+    train_list = np.arange(0,29233).tolist()
+
+    train_gen = DataGenerator(train_list, labels0, labels1, **params)
+    return train_gen
 
 '''To load the data files'''
 def load_data_train(leaveoutsession, bins):
@@ -55,42 +74,53 @@ def load_data_train(leaveoutsession, bins):
 
 
 '''Auxilliary Functions'''
-def labelCounter(label_count, labels0, labels1):    
-    for i in range(len(labels0)):
-        label_count[(labels0[i], labels1[i])] += 1
-
+def update_count(label_count, activity):   
+ 
+    label_count[activity[1]] += 1
     return label_count
 
-def load_state(uid, sess, bins):
-    m_filename = "./saved/" + str(uid) + "_Sess_" + str(sess) + "_Bin_" + str(bins) + ".json"
+def countFull(label_count, activity, train_flag):
+    if train_flag == 1:
+        if label_count[activity[1]] < 3:
+            return False
+        else:
+            return True
+    elif train_flag == 0:
+        if label_count[activity[1]] < 5:
+            return False
+        else:
+            return True
+
+def load_state(uid):
+    m_filename = "./saved/" + str(uid) +".json"
     print('Loading State... for UID: {}\nfrom file: {}'.format(uid,m_filename))
     try:
         with open(m_filename, 'r') as fp:
             fdata = fp.read()
             state = json.loads(fdata)
-            index = int(list(state.keys())[-1]) + 1
+            ID = int(list(state.keys())[-1]) + 1
             prev_activity = (int(list(state.values())[-1][0][0]),int(list(state.values())[-1][0][1]))
             sample_count = int(state["count"])
             total_samples = int(state["total"])
             # if sample_count > 4:
             #     sample_count -=1
             #     total_samples-=1
-            return state, index, sample_count, prev_activity, total_samples
+            return state, ID, sample_count, prev_activity, total_samples
     except:
         print("*** No saved files found with this filename! ***")
         exit(0)
 
-def getData(train, label0, label1, index):
-    if index == train.shape[0]:
-        return
+def getData(data_gen, index):
+    # if index == train.shape[0]:
+    #     return
     imgs = []
     avg = []
-    l0 = label0[index]
-    l1 = label1[index]
+    train, l1, l0, id = data_gen.__getitem__(index)
+
     for frame in range(train.shape[3]):
-        imgs.append(train[index,:,:,frame,0])
-        avg.append(np.mean(train[index,:,:,frame,0]))
-    return np.asarray(imgs), l0, l1, avg
+        imgs.append(train[0,:,:,frame,0])
+        avg.append(np.mean(train[0,:,:,frame,0]))
+    return np.asarray(imgs), l0[0] + 1, l1[0] + 1, avg, id[0]
 
 
 def colorFrame(f):
@@ -124,8 +154,8 @@ def update_state(state, index, lab0, lab1, in_lab0, in_lab1, count, total_sample
         print(state)
     return state
 
-def save_state(uid, session, b, state):
-    with open("./saved/" + str(uid) + "_Sess_" + str(session) + "_Bin_" + str(b) + ".json", 'w') as fp:
+def save_state(uid, state):
+    with open("./saved/" + str(uid) + ".json", 'w') as fp:
         json.dump(state, fp)
         fp.close()
 
@@ -142,6 +172,8 @@ def main():
     index = opt.sample
     width, height = 1024,786
     state = defaultdict(str)
+    label_count = defaultdict(int)
+
     sample_count = 0
     uid = random.randint(1,101)
     prev_activity = None
@@ -150,16 +182,22 @@ def main():
     '''Loading a state'''
     if opt.load == 1 and opt.uid != 0:
         uid = opt.uid
-        state, index, sample_count, prev_activity, total_samples = load_state(opt.uid, opt.session, opt.bin)
+        state, index, sample_count, prev_activity, total_samples = load_state(opt.uid)
     elif opt.load == 0 and opt.uid != 0:
         uid = opt.uid
     else:
         print("Assigned User ID: ", uid)
     
-    session = opt.session
-    bin = opt.bin
-    data, labels1, labels0, maxIndex = load_data_train(session, bin)
-    print('Number of Samples: ', maxIndex)
+    if opt.train == 1:
+        opt.debug = 1
+    # session = opt.session
+    # bin = opt.bin
+    data_gen = load_data(opt.data_path, opt.train)
+
+
+    # data, labels1, labels0, maxIndex = load_data_train(session, bin)
+
+    # print('Number of Samples: ', maxIndex)
     activity = None
 
     '''Define the window layout'''
@@ -196,8 +234,9 @@ def main():
 
     label_view_column = [
         [sg.Text('Enter Labels(0,1): ')],
-        [sg.InputText('Enter Label0', size=(52,1), justification='right', text_color='red', background_color='white', key='in_label0')],
-        [sg.InputText('Enter Label1', size=(52,1), justification='right', text_color='red', background_color='white', key='in_label1')],
+        [sg.InputText('Enter Category (1-9)', size=(52,1), justification='right', text_color='red', background_color='white', key='in_label0')],
+        [sg.InputText('Enter Exercise (1-47)', size=(52,1), justification='right', text_color='red', background_color='white', key='in_label1')],
+        [sg.Text("", size=(60, 1), justification="center", key='labels', font='Any 24')],
         [sg.Button("Save", size=(10, 1), key="-SAVE-")],
         [sg.Text("", size=(60, 1), justification="right", key='new', text_color='green')],
         [sg.Text("", size=(60, 1), justification="right", key='save_prompt', text_color='red')],
@@ -210,7 +249,6 @@ def main():
         # [sg.Text("SmartMAT Data Visualizer", size=(60, 1), justification="center")],
         [sg.Text("", size=(60, 1), justification="center", key='session')],
         [sg.Text("", size=(60, 1), justification="center", key='frame')],
-        [sg.Text("", size=(60, 1), justification="center", key='labels')],
         [sg.Text("", size=(60, 1), justification="center", key='samples')],
         [sg.Text("", size=(60, 1), justification="center", key='user')],
 
@@ -226,6 +264,7 @@ def main():
             sg.Column(button_view_column),
             sg.VSeparator(),
             sg.Column(label_view_column),
+
         ]
 
         
@@ -236,7 +275,7 @@ def main():
     window.Maximize()
     
     # Populating the window
-    frames, label0, label1, avg = getData(data, labels0, labels1, index)
+    frames, label0, label1, avg, ID = getData(data_gen, index)
     window["-PLOT-"].update(data=pressurePlot(avg))
     activity = (label0,label1)
 
@@ -251,7 +290,7 @@ def main():
                 sg.Popup('Please annotate and save this sample to exit.', keep_on_top=True)
                 continue
             if (sg.popup_yes_no('Save this session?')) == 'Yes':
-                save_state(uid,session, bin, state)
+                save_state(uid,state)
                 break
             else:
                 break
@@ -281,46 +320,28 @@ def main():
                 time.sleep(0.1)
 
         if event == 'Next ->':
-            if index + 1 == maxIndex:
-                sg.Popup('Max Frames reached! Loading next bin/session!', keep_on_top=True) #add next session file here.
-                save_state(uid,session, bin, state)
-                
-                if(bin < 4):
-                    bin = bin + 1
-                elif(bin >= 4):
-                    bin = 1
-                    session = session + 1
-                if(session >= 3):
-                    if (sg.popup_yes_no('Save this session?')) == 'Yes':
-                        save_state(uid,session, bin, state)
-                        exit(0)
-                    else:
-                        exit(0)
-                
-                window["session"].update("Loading Session: {}, Bin: {} ....".format(session, bin))
-                data, labels1, labels0, maxIndex = load_data_train(session, bin)
-                index = 0
-                state = defaultdict(str)
-                sample_count = 0
-                total_samples = 0
-                if opt.debug == 1:
-                    window["count"].update("Sample Count: " + str(sample_count))
-            
             index += 1
             print('Index: ', index)
-            frames, label0, label1, avg = getData(data, labels0, labels1, index)
-            prev_activity = activity
+            frames, label0, label1, avg, ID = getData(data_gen,index)
+            # prev_activity = activity
             activity = (label0, label1)
             
-            if prev_activity != activity:
-                sample_count = 0
-                window["new"].update("New Sample!")
+            while countFull(label_count, activity, opt.train):
+                index += 1
+                print('Index: ', index)
+                frames, label0, label1, avg, ID = getData(data_gen,index)
+                # prev_activity = activity
+                activity = (label0, label1)    
+            
+            # if prev_activity != activity:
+            #     sample_count = 0
+            #     window["new"].update("New Sample!")
 
-            window["session"].update("Session: {}, Bin: {}".format(session, bin))
-            window["labels"].update("Sample ID: {}/{}".format(index,maxIndex))
+            # window["session"].update("Session: {}, Bin: {}".format(session, bin))
+            window["labels"].update("Sample ID: {}".format(ID))
 
             if opt.debug == 1:
-                window["labels"].update("Sample: {}/{}, Label-0: {}, Label-1: {}".format(index,maxIndex,label0,label1))
+                window["labels"].update("Sample: {}, Category: {}, Exercise: {}".format(ID,label0,label1))
             # draw_figure(window["-CANVAS-"].TKCanvas, pressurePlot(avg))
             window["-PLOT-"].update(data=pressurePlot(avg))
             window["save_prompt"].update("")
@@ -338,14 +359,13 @@ def main():
                 continue
             index -= 1
             print('Index: ', index)
-            frames, label0, label1, avg= getData(data, labels0, labels1, index)
-            prev_activity = activity
+            frames, label0, label1, avg, ID = getData(data_gen, index)
+            # prev_activity = activity
             activity = (label0, label1)
-            window["session"].update("Session: {}, Bin: {}".format(session, bin))
-            window["labels"].update("Sample ID: {}/{}".format(index,maxIndex))
+            window["labels"].update("Sample ID: {}".format(ID))
 
             if opt.debug == 1:
-                window["labels"].update("Sample: {}/{}, Label-0: {}, Label-1: {}".format(index,maxIndex,label0,label1))
+                window["labels"].update("Sample: {}, Label-0: {}, Label-1: {}".format(ID,label0,label1))
             # draw_figure(window["-CANVAS-"].TKCanvas, pressurePlot(avg))                
             window["-PLOT-"].update(data=pressurePlot(avg))
             window["save_prompt"].update("")
@@ -364,69 +384,39 @@ def main():
                 if total_samples == 235:
                     sg.Popup('Annotation Samples Completed! You may save and exit.', keep_on_top=True)
                     continue
-                sample_count +=1
-                total_samples += 1
-                state = update_state(state,str(index), str(label0), str(label1), str(in_lab0), str(in_lab1), str(sample_count), str(total_samples), opt.debug)
-                if opt.debug == 1:
-                    window["count"].update("Sample Count: " + str(sample_count))
-                # print('Sample Count: ',sample_count)
+                # sample_count +=1
+                len_state = len(list(state.values()))
+                state = update_state(state,str(ID), str(label0), str(label1), str(in_lab0), str(in_lab1), str(sample_count), str(total_samples), opt.debug)
+                
+                # exit(0)
+                if len_state < len(list(state.values())):
+                    label_count = update_count(label_count, activity)
+                    total_samples += 1
+
                 window["save_prompt"].update("Saved!")
                 # window["-SAVE-"].disappear = True
                 window.FindElement('-SAVE-').Update(disabled=True)
                 
-                if sample_count > 4:
-                    while (activity == prev_activity):
-                        if index + 1 == maxIndex:
-                            sg.Popup('Session Ended. Saving this file!', keep_on_top=True)
-                            save_state(uid,session, bin, state)
-
-                            if(bin < 5):
-                                bin = bin + 1
-                                
-                            elif(bin >= 5):
-                                bin = 0
-                                session = session + 1
-                            elif(session >= 3):
-                                if (sg.popup_yes_no('Save this session?')) == 'Yes':
-                                    save_state(uid, session, bin, state)
-                                    exit(0)
-                                else:
-                                    exit(0)
-                            
-                            window["samples"].update("Loading Session: {}, Bin: {} ....".format(session, bin))
-                            data, labels1, labels0, maxIndex = load_data_train(session, bin)
-                            state = defaultdict(str)
-                            sample_count = 0
-                            total_samples = 0
-                            break
-                            # index = 0
-                            # break
-                        index += 1
-                        frames, label0, label1, avg = getData(data, labels0, labels1, index)
-                        prev_activity = activity
-                        if opt.debug == 1:
-                            print(activity)
-                            print(prev_activity)
-                        activity = (label0, label1)
-                    window["-PLOT-"].update(data=pressurePlot(avg))
-                    sample_count = 0
-                    window.FindElement('-SAVE-').Update(disabled=False)
-                    window["new"].update("New Sample!")
-                    window["save_prompt"].update("")
             except:
                 sg.Popup('Invalid Label(s)!', keep_on_top=True)
                 continue
 
         imgbytes = cv2.imencode(".png", frame)[1].tobytes()
         window["-IMAGE-"].update(data=imgbytes)
-        window["session"].update("Session: {}, Bin: {}".format(session, bin))
+        # window["session"].update("Session: {}, Bin: {}".format(session, bin))
         window["samples"].update("Samples: {}/235".format(total_samples))
-        window["user"].update("UserID: {}".format(uid))
-        window["labels"].update("Sample ID: {}/{}".format(index, maxIndex))
+        
+        if opt.train == 1:
+            window.FindElement("user").Update(text_color='red')
+            window["user"].update("TRAINING MODE")            
+        else:
+            window["user"].update("UserID: {}".format(uid))
+
+        window["labels"].update("Sample ID: {}".format(ID))
 
         if opt.debug == 1:
-            window["count"].update("Sample Count: " + str(sample_count))
-            window["labels"].update("Sample: {}/{}, Label-0: {}, Label-1: {}".format(index,maxIndex,label0,label1))
+            # window["count"].update("Sample Count: " + str(sample_count))
+            window["labels"].update("Sample: {}, Category: {}, Exercise: {}".format(ID,label0,label1))
 
     window.close()
 
