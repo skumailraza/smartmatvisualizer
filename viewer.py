@@ -249,6 +249,7 @@ def main():
         # [sg.Text("SmartMAT Data Visualizer", size=(60, 1), justification="center")],
         [sg.Text("", size=(60, 1), justification="center", key='session')],
         [sg.Text("", size=(60, 1), justification="center", key='frame')],
+        [sg.Text("", size=(60, 1), justification="center", key='sid')],
         [sg.Text("", size=(60, 1), justification="center", key='samples')],
         [sg.Text("", size=(60, 1), justification="center", key='user')],
 
@@ -338,7 +339,7 @@ def main():
             #     window["new"].update("New Sample!")
 
             # window["session"].update("Session: {}, Bin: {}".format(session, bin))
-            window["labels"].update("Sample ID: {}".format(ID))
+            window["sid"].update("Sample ID: {}".format(ID))
 
             if opt.debug == 1:
                 window["labels"].update("Sample: {}, Category: {}, Exercise: {}".format(ID,label0,label1))
@@ -362,7 +363,7 @@ def main():
             frames, label0, label1, avg, ID = getData(data_gen, index)
             # prev_activity = activity
             activity = (label0, label1)
-            window["labels"].update("Sample ID: {}".format(ID))
+            window["sid"].update("Sample ID: {}".format(ID))
 
             if opt.debug == 1:
                 window["labels"].update("Sample: {}, Label-0: {}, Label-1: {}".format(ID,label0,label1))
@@ -412,7 +413,7 @@ def main():
         else:
             window["user"].update("UserID: {}".format(uid))
 
-        window["labels"].update("Sample ID: {}".format(ID))
+        window["sid"].update("Sample ID: {}".format(ID))
 
         if opt.debug == 1:
             # window["count"].update("Sample Count: " + str(sample_count))
